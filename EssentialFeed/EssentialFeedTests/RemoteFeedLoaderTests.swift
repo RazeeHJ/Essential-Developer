@@ -15,7 +15,7 @@ struct RemoteFeedLoaderTests {
     func test_init_doesNotRequestDataFromURL()  {
         let (_, client) = makeSUT()
 
-        XCTAssertNil(client.requestedURL)
+        XCTAssertTrue(client.requestedURLs.isEmpty)
     }
 
     @Test
@@ -25,7 +25,7 @@ struct RemoteFeedLoaderTests {
 
         sut.load()
 
-        XCTAssertEqual(client.requestedURL, url)
+        XCTAssertEqual(client.requestedURLs, [url])
     }
 
     @Test
@@ -51,11 +51,9 @@ struct RemoteFeedLoaderTests {
     }
 
     private class HTTPClientSpy: HTTPClient {
-        var requestedURL: URL?
         var requestedURLs = [URL]()
 
         func get(from url: URL) {
-            requestedURL = url
             requestedURLs.append(url)
         }
     }
