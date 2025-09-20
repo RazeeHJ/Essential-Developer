@@ -15,7 +15,7 @@ struct RemoteFeedLoaderTests {
     func test_init_doesNotRequestDataFromURL()  {
         let (_, client) = makeSUT()
 
-        XCTAssertTrue(client.requestedURLs.isEmpty)
+        #expect(client.requestedURLs.isEmpty == true)
     }
 
     @Test
@@ -25,7 +25,8 @@ struct RemoteFeedLoaderTests {
 
         sut.load()
 
-        XCTAssertEqual(client.requestedURLs, [url])
+        #expect(client.requestedURLs == [url])
+
     }
 
     @Test
@@ -36,7 +37,8 @@ struct RemoteFeedLoaderTests {
         sut.load()
         sut.load()
 
-        XCTAssertEqual(client.requestedURLs, [url, url])
+        #expect(client.requestedURLs == [url, url])
+
     }
 
     @Test
@@ -47,8 +49,8 @@ struct RemoteFeedLoaderTests {
         sut.load { capturedErrors.append($0) }
 
         let clientError = NSError(domain: "Test", code: 0)
-        client.completions[0](clientError)
-        XCTAssertEqual(capturedErrors, [.connectivity])
+        client.complete(with: clientError)
+        #expect(capturedErrors == [.connectivity])
     }
 
     // MARK - Helpers
@@ -69,6 +71,10 @@ struct RemoteFeedLoaderTests {
         func get(from url: URL, completion: @escaping (Error) -> Void) {
             completions.append(completion)
             requestedURLs.append(url)
+        }
+
+        func complete(with error: Error, at index: Int = 0) {
+            completions[index](error)
         }
     }
 }
