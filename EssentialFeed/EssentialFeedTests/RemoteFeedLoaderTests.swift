@@ -42,7 +42,7 @@ struct RemoteFeedLoaderTests {
     func test_load_deliversErrorOnClientError() {
         let (sut, client) = makeSUT()
 
-        expect(sut, toCompleteWithError: .connectivity) {
+        expect(sut, toCompleteWith: .failure(.connectivity)) {
             let clientError = NSError(domain: "Test", code: 0)
             client.complete(with: clientError)
         }
@@ -54,7 +54,7 @@ struct RemoteFeedLoaderTests {
 
         let samples = [199, 201, 300, 400, 500]
         samples.enumerated().forEach { index, code in
-            expect(sut, toCompleteWithError: .invalidData) {
+            expect(sut, toCompleteWith: .failure(.invalidData)) {
                 client.complete(withStatusCode: code, at: index)
             }
         }
@@ -63,7 +63,7 @@ struct RemoteFeedLoaderTests {
     @Test
     func test_load_deliversErrorOn200HTTPResponseWithInvalidJSON() {
         let (sut, client) = makeSUT()
-        expect(sut, toCompleteWithError: .invalidData) {
+        expect(sut, toCompleteWith: .failure(.invalidData)) {
             let invalidJSON = Data("invalid json".utf8)
             client.complete(withStatusCode: 200, data: invalidJSON)
         }
@@ -82,15 +82,15 @@ struct RemoteFeedLoaderTests {
 
     private func expect(
         _ sut: RemoteFeedLoader,
-        toCompleteWithError error: RemoteFeedLoader.Error,
+        toCompleteWith error: RemoteFeedLoader.Result,
         when action: () -> Void,
         fileID: String = #fileID,
         filePath: String = #filePath,
         line: Int = #line,
         column: Int = #column
     ) {
-        var capturedErrors = [RemoteFeedLoader.Error]()
-        sut.load { capturedErrors.append($0) }
+        var capturedResult = [RemoteFeedLoader.Result]()
+        sut.load { capturedResult.append($0) }
 
         action()
 
@@ -101,7 +101,7 @@ struct RemoteFeedLoaderTests {
             column: column
         )
 
-        #expect(capturedErrors == [error], sourceLocation: sourceLocation)
+        #expect(capturedResult == [error], sourceLocation: sourceLocation)
     }
 
     private class HTTPClientSpy: HTTPClient {
