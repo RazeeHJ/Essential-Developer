@@ -12,6 +12,7 @@
 		080EDF0E21B6DCB600813479 /* FeedLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 080EDF0D21B6DCB600813479 /* FeedLoader.swift */; };
 		A05E40562E7C9A0C00713854 /* RemoteFeedLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05E40552E7C9A0C00713854 /* RemoteFeedLoaderTests.swift */; };
 		A05E405A2E7D94C600713854 /* RemoteFeedLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05E40592E7D94C600713854 /* RemoteFeedLoader.swift */; };
+		A0B895962EA821AA00065C08 /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B895952EA821A500065C08 /* HTTPClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +35,7 @@
 		A05E40552E7C9A0C00713854 /* RemoteFeedLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteFeedLoaderTests.swift; sourceTree = "<group>"; };
 		A05E40572E7CA04D00713854 /* EssentialFeedTests.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = EssentialFeedTests.xctestplan; sourceTree = "<group>"; };
 		A05E40592E7D94C600713854 /* RemoteFeedLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteFeedLoader.swift; sourceTree = "<group>"; };
+		A0B895952EA821A500065C08 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +107,7 @@
 		A05E40582E7D94B600713854 /* Feed API */ = {
 			isa = PBXGroup;
 			children = (
+				A0B895952EA821A500065C08 /* HTTPClient.swift */,
 				A05E40592E7D94C600713854 /* RemoteFeedLoader.swift */,
 			);
 			path = "Feed API";
@@ -223,6 +226,7 @@
 			files = (
 				080EDF0E21B6DCB600813479 /* FeedLoader.swift in Sources */,
 				A05E405A2E7D94C600713854 /* RemoteFeedLoader.swift in Sources */,
+				A0B895962EA821AA00065C08 /* HTTPClient.swift in Sources */,
 				080EDF0C21B6DAE800813479 /* FeedItem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
