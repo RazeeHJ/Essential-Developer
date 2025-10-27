@@ -6,8 +6,8 @@
 //
 
 import Testing
-import XCTest
 import EssentialFeed
+import Foundation
 
 struct RemoteFeedLoaderTests {
 
@@ -19,7 +19,7 @@ struct RemoteFeedLoaderTests {
     }
 
     @Test
-    func test_load_requestsDataFromURL() {
+    func test_load_requestsDataFromURL() async throws {
         let url = URL(string: "https://a-given-url.com")!
         let (sut, client) = makeSUT(url: url)
 
@@ -110,6 +110,9 @@ struct RemoteFeedLoaderTests {
     ) {
         let client = HTTPClientSpy()
         let sut = RemoteFeedLoader(url: url, client: client)
+        trackForMemoryLeaks(client)
+        trackForMemoryLeaks(sut)
+
         return (sut, client)
     }
 
@@ -161,6 +164,25 @@ struct RemoteFeedLoaderTests {
         )
 
         #expect(capturedResult == [error], sourceLocation: sourceLocation)
+    }
+
+    func trackForMemoryLeaks(
+        _ instance: AnyObject,
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column
+    ) {
+        weak var weakInstance = instance
+        let sourceLocation = SourceLocation(
+            fileID: fileID,
+            filePath: filePath,
+            line: line,
+            column: column
+        )
+        do {
+            #expect(weakInstance == nil, "Potential memory leak", sourceLocation: sourceLocation)
+        }
     }
 
     private class HTTPClientSpy: HTTPClient {
