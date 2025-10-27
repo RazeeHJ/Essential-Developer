@@ -9,7 +9,13 @@ import Testing
 import EssentialFeed
 import Foundation
 
-struct RemoteFeedLoaderTests {
+class RemoteFeedLoaderTests {
+    private var sutTracker: MemoryLeakTracker<RemoteFeedLoader>?
+    private var clientTracker: MemoryLeakTracker<HTTPClientSpy>?
+
+    deinit {
+        sutTracker?.verify()
+    }
 
     @Test
     func test_init_doesNotRequestDataFromURL()  {
@@ -104,15 +110,22 @@ struct RemoteFeedLoaderTests {
 
     // MARK - Helpers
 
-    private func makeSUT(url: URL = URL(string: "https://a-url.com")!) -> (
+    private func makeSUT(
+        url: URL = URL(string: "https://a-url.com")!,
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column
+    ) -> (
         sut: RemoteFeedLoader,
         client: HTTPClientSpy
     ) {
         let client = HTTPClientSpy()
         let sut = RemoteFeedLoader(url: url, client: client)
-        trackForMemoryLeaks(client)
-        trackForMemoryLeaks(sut)
+        let sourceLocation = SourceLocation(fileID: #fileID, filePath: filePath, line: line, column: column)
 
+        clientTracker = .init(instance: client, sourceLocation: sourceLocation)
+        sutTracker = .init(instance: sut, sourceLocation: sourceLocation)
         return (sut, client)
     }
 
@@ -166,25 +179,6 @@ struct RemoteFeedLoaderTests {
         #expect(capturedResult == [error], sourceLocation: sourceLocation)
     }
 
-    func trackForMemoryLeaks(
-        _ instance: AnyObject,
-        fileID: String = #fileID,
-        filePath: String = #filePath,
-        line: Int = #line,
-        column: Int = #column
-    ) {
-        weak var weakInstance = instance
-        let sourceLocation = SourceLocation(
-            fileID: fileID,
-            filePath: filePath,
-            line: line,
-            column: column
-        )
-        do {
-            #expect(weakInstance == nil, "Potential memory leak", sourceLocation: sourceLocation)
-        }
-    }
-
     private class HTTPClientSpy: HTTPClient {
         private var messages = [(url: URL, completion: (HTTPClientResult) -> Void)]()
         var requestedURLs: [URL] {
@@ -208,5 +202,14 @@ struct RemoteFeedLoaderTests {
             )!
             messages[index].completion(.success(data, response))
         }
+    }
+}
+
+struct MemoryLeakTracker<T: AnyObject> {
+    weak var instance: T?
+    var sourceLocation: SourceLocation
+
+    func verify() {
+        #expect(instance == nil, "Expected \(instance) to be deallocated. Potential memory leak", sourceLocation: sourceLocation)
     }
 }
