@@ -15,6 +15,7 @@ class RemoteFeedLoaderTests {
 
     deinit {
         sutTracker?.verify()
+        clientTracker?.verify()
     }
 
     @Test
@@ -126,6 +127,7 @@ class RemoteFeedLoaderTests {
 
         clientTracker = .init(instance: client, sourceLocation: sourceLocation)
         sutTracker = .init(instance: sut, sourceLocation: sourceLocation)
+
         return (sut, client)
     }
 
