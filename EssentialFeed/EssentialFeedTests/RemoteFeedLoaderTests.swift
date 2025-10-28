@@ -108,6 +108,22 @@ class RemoteFeedLoaderTests {
         }
     }
 
+    @Test
+    func test_load_doesNotDeliverResultAfterInstanceHasBeenDeallocated() async throws {
+        let url =  URL(string: "https://a-url.com")!
+        let client = HTTPClientSpy()
+        var sut: RemoteFeedLoader? = RemoteFeedLoader(url: url, client: client)
+
+        var capturedResults = [RemoteFeedLoader.Result]()
+        sut?.load { capturedResults.append($0) }
+
+        sut = nil
+        client.complete(withStatusCode: 200, data: makeItemsJSON([]))
+
+        #expect(capturedResults == [])
+    }
+
+
 
     // MARK - Helpers
 
