@@ -22,73 +22,65 @@ class RemoteFeedLoaderTests {
     func test_init_doesNotRequestDataFromURL()  {
         let (_, client) = makeSUT()
 
-        #expect(client.requestedURLs.isEmpty == true)
+        #expect(client.requests.isEmpty == true)
     }
 
     @Test
     func test_load_requestsDataFromURL() async throws {
-        let url = URL(string: "https://a-given-url.com")!
-        let (sut, client) = makeSUT(url: url)
+        let url = anyURL()
+        let (sut, client) = makeSUT(url: url, result: .success(anyValidResponse()))
 
-        sut.load { _ in }
-        #expect(client.requestedURLs == [url])
+        let _ = try await sut.load()
+        #expect(client.requests.map { $0.url } == [url])
     }
 
     @Test
-    func test_loadTwice_requestsDataFromURLTwice() {
-        let url = URL(string: "https://a-given-url.com")!
-        let (sut, client) = makeSUT(url: url)
+    func test_loadTwice_requestsDataFromURLTwice() async throws {
+        let url = anyURL()
+        let (sut, client) = makeSUT(url: url, result: .success(anyValidResponse()))
 
-        sut.load { _ in }
-        sut.load { _ in }
+        let _ = try await sut.load()
+        let _ = try await sut.load()
 
-        #expect(client.requestedURLs == [url, url])
+        #expect(client.requests.map { $0.url } == [url, url])
     }
 
     @Test
-    func test_load_deliversErrorOnClientError() {
-        let (sut, client) = makeSUT()
+    func test_load_deliversErrorOnClientError() async throws {
+        let clientError = NSError(domain: "Test", code: 0)
+        let (sut, _) = makeSUT(result: .failure(clientError))
 
-        expect(sut, toCompleteWith: .failure(.connectivity)) {
-            let clientError = NSError(domain: "Test", code: 0)
-            client.complete(with: clientError)
-        }
+        await expect(sut, toThrowWith: RemoteFeedLoader.Error.connectivity)
     }
 
     @Test
-    func test_load_deliversErrorOnNon200HTTPResponse() {
-        let (sut, client) = makeSUT()
-
+    func test_load_deliversErrorOnNon200HTTPResponse() async throws {
         let samples = [199, 201, 300, 400, 500]
-        samples.enumerated().forEach { index, code in
-            expect(sut, toCompleteWith: .failure(.invalidData)) {
-                let json = makeItemsJSON([])
-                client.complete(withStatusCode: code, data: json, at: index)
-            }
+
+        for code in samples {
+            let non200Response = (Data(), httpResponse(code: code))
+            let (sut, _) = makeSUT(result: .success(non200Response))
+            await expect(sut, toThrowWith: RemoteFeedLoader.Error.invalidData)
         }
     }
 
     @Test
-    func test_load_deliversErrorOn200HTTPResponseWithInvalidJSON() {
-        let (sut, client) = makeSUT()
-        expect(sut, toCompleteWith: .failure(.invalidData)) {
-            let invalidJSON = Data("invalid json".utf8)
-            client.complete(withStatusCode: 200, data: invalidJSON)
-        }
+    func test_load_deliversErrorOn200HTTPResponseWithInvalidJSON() async throws {
+        let invalidJSON = Data("invalid json".utf8)
+        let (sut, _) = makeSUT(
+            result: .success((invalidJSON, anyValidHTTPResponse()))
+        )
+        await expect(sut, toThrowWith: RemoteFeedLoader.Error.invalidData)
     }
 
     @Test
-    func test_load_deliversNoItemsOn200HTTPResponseWithEmptyJSONList() {
-        let (sut, client) = makeSUT()
-        expect(sut, toCompleteWith: .success([])) {
-            let emptyListJSON = makeItemsJSON([])
-            client.complete(withStatusCode: 200, data: emptyListJSON)
-        }
+    func test_load_deliversNoItemsOn200HTTPResponseWithEmptyJSONList() async throws {
+        let (sut, _) = makeSUT(result: .success(anyValidResponse()))
+        await expect(sut, toSucceedWith: [])
     }
 
     @Test
-    func test_load_deliversItemsOn200HTTPResponseWithJSONItems() {
-        let (sut, client) = makeSUT()
+    func test_load_deliversItemsOn200HTTPResponseWithJSONItems() async throws {
         let item1 = makeItem(
             id: UUID(),
             imageURL: URL(string: "http:\\a-url.com")!
@@ -102,33 +94,30 @@ class RemoteFeedLoaderTests {
         )
 
         let items = [item1.model, item2.model]
-        expect(sut, toCompleteWith: .success(items)) {
-            let json = makeItemsJSON([item1.json, item2.json])
-            client.complete(withStatusCode: 200, data: json)
-        }
+        let json = makeItemsJSON([item1.json, item2.json])
+        let (sut, _) = makeSUT(result: .success((json, anyValidHTTPResponse())))
+        await expect(sut, toSucceedWith: items)
     }
 
     @Test
     func test_load_doesNotDeliverResultAfterInstanceHasBeenDeallocated() async throws {
-        let url =  URL(string: "https://a-url.com")!
-        let client = HTTPClientSpy()
-        var sut: RemoteFeedLoader? = RemoteFeedLoader(url: url, client: client)
+        let json = makeItemsJSON([])
 
-        var capturedResults = [RemoteFeedLoader.Result]()
-        sut?.load { capturedResults.append($0) }
-
+        var (sut, _): (RemoteFeedLoader?, HTTPClientSpy) = makeSUT(result: .success((json, anyValidHTTPResponse())))
+        let capturedResults = try await sut?.load()
         sut = nil
-        client.complete(withStatusCode: 200, data: makeItemsJSON([]))
 
         #expect(capturedResults == [])
     }
-
-
 
     // MARK - Helpers
 
     private func makeSUT(
         url: URL = URL(string: "https://a-url.com")!,
+        result: Result<(Data, HTTPURLResponse), Error> = .success((
+            Data(),
+            HTTPURLResponse()
+        )),
         fileID: String = #fileID,
         filePath: String = #filePath,
         line: Int = #line,
@@ -137,7 +126,7 @@ class RemoteFeedLoaderTests {
         sut: RemoteFeedLoader,
         client: HTTPClientSpy
     ) {
-        let client = HTTPClientSpy()
+        let client = HTTPClientSpy(result: result)
         let sut = RemoteFeedLoader(url: url, client: client)
         let sourceLocation = SourceLocation(fileID: #fileID, filePath: filePath, line: line, column: column)
 
@@ -175,18 +164,12 @@ class RemoteFeedLoaderTests {
 
     private func expect(
         _ sut: RemoteFeedLoader,
-        toCompleteWith error: RemoteFeedLoader.Result,
-        when action: () -> Void,
+        toThrowWith expectedError: RemoteFeedLoader.Error,
         fileID: String = #fileID,
         filePath: String = #filePath,
         line: Int = #line,
         column: Int = #column
-    ) {
-        var capturedResult = [RemoteFeedLoader.Result]()
-        sut.load { capturedResult.append($0) }
-
-        action()
-
+    ) async {
         let sourceLocation = SourceLocation(
             fileID: fileID,
             filePath: filePath,
@@ -194,31 +177,61 @@ class RemoteFeedLoaderTests {
             column: column
         )
 
-        #expect(capturedResult == [error], sourceLocation: sourceLocation)
+        do {
+            let _ = try await sut.load()
+            #expect(Bool(false), "Expected error: \(expectedError)", sourceLocation: sourceLocation)
+        } catch {
+            let error = error as? RemoteFeedLoader.Error
+            print("Caught error type: \(type(of: error))")
+
+            #expect(
+                error == expectedError,
+                sourceLocation: sourceLocation
+            )
+        }
+    }
+
+    private func expect(
+        _ sut: RemoteFeedLoader,
+        toSucceedWith expectedItems: [FeedItem],
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column
+    ) async {
+        do {
+            let response = try await sut.load()
+            #expect(response == expectedItems, sourceLocation: .init(
+                fileID: fileID,
+                filePath: filePath,
+                line: line,
+                column: column
+            ))
+        } catch {
+            #expect(Bool(false),"Expected success, but got success",
+                sourceLocation: .init(
+                    fileID: fileID,
+                    filePath: filePath,
+                    line: line,
+                    column: column
+                )
+            )
+        }
     }
 
     private class HTTPClientSpy: HTTPClient {
-        private var messages = [(url: URL, completion: (HTTPClientResult) -> Void)]()
-        var requestedURLs: [URL] {
-            return messages.map { $0.url }
+        private(set) var requests = [URLRequest]()
+
+        let result: Result<(Data, HTTPURLResponse), Error>
+
+        init(result: Result<(Data, HTTPURLResponse), Error>) {
+            self.result = result
         }
 
-        func get(from url: URL, completion: @escaping (HTTPClientResult) -> Void) {
-            messages.append((url, completion))
-        }
-
-        func complete(with error: Error, at index: Int = 0) {
-            messages[index].completion(.failure(error))
-        }
-
-        func complete(withStatusCode code: Int, data: Data, at index: Int = 0) {
-            let response = HTTPURLResponse(
-                url: requestedURLs[index],
-                statusCode: code,
-                httpVersion: nil,
-                headerFields: nil
-            )!
-            messages[index].completion(.success(data, response))
+        func get(from url: URL) async throws -> (Data, HTTPURLResponse) {
+            let request = URLRequest(url: url)
+            requests.append(request)
+            return try result.get()
         }
     }
 }
@@ -230,4 +243,25 @@ struct MemoryLeakTracker<T: AnyObject> {
     func verify() {
         #expect(instance == nil, "Expected \(instance) to be deallocated. Potential memory leak", sourceLocation: sourceLocation)
     }
+}
+
+func anyURL() -> URL {
+    URL(string: "https://any-url.com")!
+}
+
+func anyValidResponse() -> (Data, HTTPURLResponse) {
+    (emptyItemsJSON(), anyValidHTTPResponse())
+}
+
+private func emptyItemsJSON() -> Data {
+    Data("{\"items\": []}".utf8)
+}
+
+func anyValidHTTPResponse() -> HTTPURLResponse {
+    httpResponse(code: 200)
+}
+
+func httpResponse(code: Int) -> HTTPURLResponse {
+    let httpResponse = HTTPURLResponse(url: anyURL(), statusCode: code, httpVersion: nil, headerFields: nil)!
+    return httpResponse
 }
