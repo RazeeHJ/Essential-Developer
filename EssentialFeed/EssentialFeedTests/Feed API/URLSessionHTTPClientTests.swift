@@ -13,30 +13,52 @@ class URLSessionHTTPClientTests {
 
     @Test
     func test_init_doesNotPerformGetRequest() async throws {
-        let session = URLSessionSpy()
+        let session = URLSessionSpy(result: .success(anyValidResponse()))
         #expect(session.receivedURLs.isEmpty)
     }
     
     @Test
     func test_getFromURL_createdDataTaskWithURL() async throws {
         let url = anyURL()
-        let session = URLSessionSpy()
+        let session = URLSessionSpy(result: .success(anyValidResponse()))
         let sut = URLSessionHTTPClient(session: session)
 
-        try await sut.get(from: url)
+        let _ = try await sut.get(from: url)
 
         #expect(session.receivedURLs == [url])
+    }
+
+    @Test
+    func test_getFromURL_failsOnRequestError() async throws {
+        let url = anyURL()
+        let expectedError = NSError(domain: "any error", code: 1)
+        let session = URLSessionSpy(result: .failure(expectedError))
+
+        do {
+            let result = try await session.dataTask(with: url)
+        } catch {
+            let error = error as NSError
+            #expect(error == expectedError)
+        }
     }
 
     // MARK: - Helpers
 
     private class URLSessionSpy: URLSessionProtocol {
-        private let result: (Data, URLResponse) = (Data(), URLResponse())
+        private let result: Result<(Data, URLResponse), Error>
         var receivedURLs = [URL]()
+
+        init(
+            result: Result<(Data, URLResponse), Error>,
+            receivedURLs: [URL] = [URL]()
+        ) {
+            self.result = result
+            self.receivedURLs = receivedURLs
+        }
 
         func dataTask(with url: URL) async throws -> (Data, URLResponse) {
             receivedURLs.append(url)
-            return result
+            return try result.get()
         }
     }
 }

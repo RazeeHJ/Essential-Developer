@@ -18,7 +18,7 @@ public class URLSessionHTTPClient {
         self.session = session
     }
 
-    public func get(from url: URL) async throws {
+    public func get(from url: URL) async throws -> (Data, URLResponse) {
         try await session.dataTask(with: url)
     }
 }
