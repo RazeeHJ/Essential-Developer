@@ -7,14 +7,14 @@
 
 import Foundation
 
-public protocol URLSessionProtocol {
+public protocol HTTPSession {
     func dataTask(with url: URL) async throws -> (Data, URLResponse)
 }
 
 public class URLSessionHTTPClient {
-    private let session: URLSessionProtocol
+    private let session: HTTPSession
 
-    public init(session: URLSessionProtocol) {
+    public init(session: HTTPSession) {
         self.session = session
     }
 
