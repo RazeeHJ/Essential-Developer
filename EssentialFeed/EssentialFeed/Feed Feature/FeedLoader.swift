@@ -4,11 +4,6 @@
 
 import Foundation
 
-enum LoadFeedResult {
-	case success([FeedItem])
-	case error(Error)
-}
-
 protocol FeedLoader {
-	func load() -> LoadFeedResult
+    func load() async throws -> [FeedItem]
 }
