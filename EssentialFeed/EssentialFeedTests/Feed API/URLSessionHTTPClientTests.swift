@@ -30,7 +30,7 @@ class URLSessionHTTPClientTests {
         defer { URLProtocolStub.reset() }
 
         let url = anyURL()
-        URLProtocolStub.stub(data: anyData(), response: anyValidHTTPResponse())
+        URLProtocolStub.stub(url: url, data: anyData(), response: anyValidHTTPResponse())
         let sut = URLSessionHTTPClient(session: makeStubbedSession())
 
         let _ = try await sut.get(from: url)
@@ -46,7 +46,7 @@ class URLSessionHTTPClientTests {
 
         let url = anyURL()
         let expectedError = NSError(domain: "any error", code: 1)
-        URLProtocolStub.stub(data: nil, response: nil, error: expectedError)
+        URLProtocolStub.stub(url: url, data: nil, response: nil, error: expectedError)
         let sut = URLSessionHTTPClient(session: makeStubbedSession())
 
         do {
@@ -68,19 +68,19 @@ class URLSessionHTTPClientTests {
             let error: Error?
         }
 
-        private static var stub: Stub?
+        private static var stubs: [URL: Stub] = [URL: Stub]()
         private static var requestedURLs: [URL] = []
         private static let lock = NSLock()
 
         // Single stub for “the next request(s)”
-        static func stub(data: Data? = nil, response: URLResponse? = nil, error: Error? = nil) {
+        static func stub(url: URL, data: Data? = nil, response: URLResponse? = nil, error: Error? = nil) {
             lock.lock(); defer { lock.unlock() }
-            stub = Stub(data: data, response: response, error: error)
+            stubs[url] = Stub(data: data, response: response, error: error)
         }
 
         static func reset() {
             lock.lock(); defer { lock.unlock() }
-            stub = nil
+            stubs = [:]
             requestedURLs = []
         }
 
@@ -102,10 +102,9 @@ class URLSessionHTTPClientTests {
 
             Self.lock.lock()
             Self.requestedURLs.append(url)
-            let stub = Self.stub
             Self.lock.unlock()
 
-            guard let stub else {
+            guard let stub = Self.stubs[url] else {
                 // Fail loudly if you forgot to stub — no silent network calls.
                 client?.urlProtocol(self, didFailWithError: NSError(domain: "Missing stub", code: 0))
                 client?.urlProtocolDidFinishLoading(self)
