@@ -249,6 +249,10 @@ func anyURL() -> URL {
     URL(string: "https://any-url.com")!
 }
 
+func anyData() -> Data {
+    Data("any data".utf8)
+}
+
 func anyValidResponse() -> (Data, HTTPURLResponse) {
     (emptyItemsJSON(), anyValidHTTPResponse())
 }

@@ -12,13 +12,14 @@ public protocol HTTPSession {
 }
 
 public class URLSessionHTTPClient {
-    private let session: HTTPSession
+    private let session: URLSession
 
-    public init(session: HTTPSession) {
+    public init(session: URLSession = .shared) {
         self.session = session
     }
 
     public func get(from url: URL) async throws -> (Data, URLResponse) {
-        try await session.dataTask(with: url)
+        let (data, response) = try await session.data(from: url)
+        return (data, response)
     }
 }
