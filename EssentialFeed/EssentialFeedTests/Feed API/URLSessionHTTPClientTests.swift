@@ -18,9 +18,14 @@ class URLSessionHTTPClientTests {
 
         defer { URLProtocolStub.reset() }
 
-        _ = makeSUT()
+        var verifyLeaks: (() async -> Void) = {}
 
-        #expect(URLProtocolStub.receivedRequests().isEmpty)
+        do {
+            let(_, v) = makeSUT()
+            verifyLeaks = v
+            #expect(URLProtocolStub.receivedRequests().isEmpty)
+        }
+        await verifyLeaks()
     }
 
     @Test
@@ -31,15 +36,19 @@ class URLSessionHTTPClientTests {
 
         let url = anyURL()
         URLProtocolStub.stub(data: anyData(), response: anyValidHTTPResponse())
-        let (sut, tracker) = makeSUT()
 
-        defer { Task { await tracker.verify() }}
-        _ = try await sut.get(from: url)
+        var verifyLeaks: (() async -> Void) = {}
 
-        let request = try #require(URLProtocolStub.receivedRequests().first)
-        #expect(request.url == url)
-        #expect(request.httpMethod == "GET")
+        do {
+            let (sut, v) = makeSUT()
+            verifyLeaks = v
+            _ = try await sut.get(from: url)
 
+            let request = try #require(URLProtocolStub.receivedRequests().first)
+            #expect(request.url == url)
+            #expect(request.httpMethod == "GET")
+        }
+        await verifyLeaks()
     }
 
     @Test
@@ -51,11 +60,13 @@ class URLSessionHTTPClientTests {
         let url = anyURL()
         let expectedError = NSError(domain: "any error", code: 1)
         URLProtocolStub.stub(data: nil, response: nil, error: expectedError)
-        let (sut, tracker) = makeSUT()
 
-        defer { Task { await tracker.verify() }}
+        var verifyLeaks: (() async -> Void) = {}
 
         do {
+            let (sut, v) = makeSUT()
+            verifyLeaks = v
+
             let _ = try await sut.get(from: url)
             Issue.record("Expected to throw \(expectedError), but succeeded instead.")
         } catch {
@@ -63,6 +74,7 @@ class URLSessionHTTPClientTests {
             #expect(error.domain == expectedError.domain)
             #expect(error.code == expectedError.code)
         }
+        await verifyLeaks()
     }
 
     // MARK: - Helpers
@@ -136,37 +148,24 @@ class URLSessionHTTPClientTests {
         column: Int = #column
     ) -> (
         sut: URLSessionHTTPClient,
-        tracker: MemoryLeakTracker<URLSessionHTTPClient>
+        verifyLeaks: () async -> Void
     ) {
         let sut = URLSessionHTTPClient(session: makeStubbedSession())
-        let location = SourceLocation(
-            fileID: fileID,
-            filePath: filePath,
-            line: line,
-            column: column
-        )
+        let sourceLocation = SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column)
 
-        return (sut, MemoryLeakTracker(instance: sut, sourceLocation: location))
+        let verifySUT = trackForMemoryLeaks(sut, sourceLocation: sourceLocation)
+
+        let verifyLeaks = {
+            await verifySUT()
+        }
+
+        return (sut, verifyLeaks)
     }
 
     private func makeStubbedSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: config)
-    }
-
-    struct MemoryLeakTracker<T: AnyObject>: @unchecked Sendable {
-        weak var instance: T?
-        var sourceLocation: SourceLocation
-
-        func verify() async {
-            await Task.yield()
-            #expect(
-                instance == nil,
-                "Expected \(instance) to be deallocated. Potential memory leak",
-                sourceLocation: sourceLocation
-            )
-        }
     }
 }
 

@@ -10,77 +10,114 @@ import EssentialFeed
 import Foundation
 
 class RemoteFeedLoaderTests {
-    private var sutTracker: MemoryLeakTracker<RemoteFeedLoader>?
-    private var clientTracker: MemoryLeakTracker<HTTPClientSpy>?
-
-    deinit {
-        sutTracker?.verify()
-        clientTracker?.verify()
-    }
-
     @Test
-    func test_init_doesNotRequestDataFromURL()  {
-        let (_, client) = makeSUT()
+    func test_init_doesNotRequestDataFromURL() async {
+        var verifyLeaks: (() async -> Void) = {}
 
-        #expect(client.requests.isEmpty == true)
+        do {
+            let (_, client, v) = makeSUT()
+            verifyLeaks = v
+
+            #expect(client.requests.isEmpty == true)
+        }
+        await verifyLeaks()
     }
 
     @Test
     func test_load_requestsDataFromURL() async throws {
+        var verifyLeaks: (() async -> Void) = {}
         let url = anyURL()
-        let (sut, client) = makeSUT(url: url, result: .success(anyValidResponse()))
 
-        let _ = try await sut.load()
-        #expect(client.requests.map { $0.url } == [url])
+        do {
+            let (sut, client, v) = makeSUT(url: url, result: .success(anyValidResponse()))
+            verifyLeaks = v
+
+            _ = try await sut.load()
+            #expect(client.requests.map { $0.url } == [url])
+        }
+        await verifyLeaks()
     }
 
     @Test
     func test_loadTwice_requestsDataFromURLTwice() async throws {
+        var verifyLeaks: (() async -> Void) = {}
         let url = anyURL()
-        let (sut, client) = makeSUT(url: url, result: .success(anyValidResponse()))
 
-        let _ = try await sut.load()
-        let _ = try await sut.load()
+        do {
+            let (sut, client, v) = makeSUT(url: url, result: .success(anyValidResponse()))
+            verifyLeaks = v
 
-        #expect(client.requests.map { $0.url } == [url, url])
+            _ = try await sut.load()
+            _ = try await sut.load()
+
+            #expect(client.requests.map { $0.url } == [url, url])
+        }
+        await verifyLeaks()
     }
 
     @Test
     func test_load_deliversErrorOnClientError() async throws {
-        let clientError = NSError(domain: "Test", code: 0)
-        let (sut, _) = makeSUT(result: .failure(clientError))
+        var verifyLeaks: (() async -> Void) = {}
 
-        await expect(sut, toThrowWith: RemoteFeedLoader.Error.connectivity)
+        let clientError = NSError(domain: "Test", code: 0)
+        do {
+            let (sut, _, v) = makeSUT(result: .failure(clientError))
+            verifyLeaks = v
+
+            await expect(sut, toThrowWith: RemoteFeedLoader.Error.connectivity)
+        }
+        await verifyLeaks()
     }
 
     @Test
     func test_load_deliversErrorOnNon200HTTPResponse() async throws {
+        var verifyLeaks: (() async -> Void) = {}
+
         let samples = [199, 201, 300, 400, 500]
 
         for code in samples {
             let non200Response = (Data(), httpResponse(code: code))
-            let (sut, _) = makeSUT(result: .success(non200Response))
-            await expect(sut, toThrowWith: RemoteFeedLoader.Error.invalidData)
+            do {
+                let (sut, _, v) = makeSUT(result: .success(non200Response))
+                verifyLeaks = v
+
+                await expect(sut, toThrowWith: RemoteFeedLoader.Error.invalidData)
+            }
+            await verifyLeaks()
         }
     }
 
     @Test
     func test_load_deliversErrorOn200HTTPResponseWithInvalidJSON() async throws {
+        var verifyLeaks: (() async -> Void) = {}
+
         let invalidJSON = Data("invalid json".utf8)
-        let (sut, _) = makeSUT(
-            result: .success((invalidJSON, anyValidHTTPResponse()))
-        )
-        await expect(sut, toThrowWith: RemoteFeedLoader.Error.invalidData)
+        do {
+            let (sut, _, v) = makeSUT(result: .success((invalidJSON, anyValidHTTPResponse())))
+            verifyLeaks = v
+
+            await expect(sut, toThrowWith: RemoteFeedLoader.Error.invalidData)
+        }
+        await verifyLeaks()
     }
 
     @Test
     func test_load_deliversNoItemsOn200HTTPResponseWithEmptyJSONList() async throws {
-        let (sut, _) = makeSUT(result: .success(anyValidResponse()))
-        await expect(sut, toSucceedWith: [])
+        var verifyLeaks: (() async -> Void) = {}
+
+        do {
+            let (sut, _, v) = makeSUT(result: .success(anyValidResponse()))
+            verifyLeaks = v
+
+            await expect(sut, toSucceedWith: [])
+        }
+        await verifyLeaks()
     }
 
     @Test
     func test_load_deliversItemsOn200HTTPResponseWithJSONItems() async throws {
+        var verifyLeaks: (() async -> Void) = {}
+
         let item1 = makeItem(
             id: UUID(),
             imageURL: URL(string: "http:\\a-url.com")!
@@ -95,19 +132,33 @@ class RemoteFeedLoaderTests {
 
         let items = [item1.model, item2.model]
         let json = makeItemsJSON([item1.json, item2.json])
-        let (sut, _) = makeSUT(result: .success((json, anyValidHTTPResponse())))
-        await expect(sut, toSucceedWith: items)
+        do {
+            let (sut, _, v) = makeSUT(result: .success((json, anyValidHTTPResponse())))
+            verifyLeaks = v
+
+            await expect(sut, toSucceedWith: items)
+        }
+
+        await verifyLeaks()
     }
 
     @Test
     func test_load_doesNotDeliverResultAfterInstanceHasBeenDeallocated() async throws {
+        var verifyLeaks: (() async -> Void) = {}
+
         let json = makeItemsJSON([])
 
-        var (sut, _): (RemoteFeedLoader?, HTTPClientSpy) = makeSUT(result: .success((json, anyValidHTTPResponse())))
-        let capturedResults = try await sut?.load()
-        sut = nil
+        do {
+            var (sut, _, v): (RemoteFeedLoader?, HTTPClientSpy, () async -> Void) = makeSUT(result: .success((json, anyValidHTTPResponse())))
+            verifyLeaks = v
 
-        #expect(capturedResults == [])
+            let capturedResults = try await sut?.load()
+            sut = nil
+
+            #expect(capturedResults == [])
+        }
+
+        await verifyLeaks()
     }
 
     // MARK - Helpers
@@ -124,16 +175,22 @@ class RemoteFeedLoaderTests {
         column: Int = #column
     ) -> (
         sut: RemoteFeedLoader,
-        client: HTTPClientSpy
+        client: HTTPClientSpy,
+        verifyLeaks: () async -> Void
     ) {
         let client = HTTPClientSpy(result: result)
         let sut = RemoteFeedLoader(url: url, client: client)
-        let sourceLocation = SourceLocation(fileID: #fileID, filePath: filePath, line: line, column: column)
 
-        clientTracker = .init(instance: client, sourceLocation: sourceLocation)
-        sutTracker = .init(instance: sut, sourceLocation: sourceLocation)
+        let sourceLocation = SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column)
+        let verifySUT = trackForMemoryLeaks(sut, sourceLocation: sourceLocation)
+        let verifyClient = trackForMemoryLeaks(client, sourceLocation: sourceLocation)
 
-        return (sut, client)
+        let verifyLeaks = {
+            await verifySUT()
+            await verifyClient()
+        }
+
+        return (sut, client, verifyLeaks)
     }
 
     private func makeItem(id: UUID, description: String? = nil, location: String? = nil, imageURL: URL) -> (
@@ -236,15 +293,6 @@ class RemoteFeedLoaderTests {
     }
 }
 
-struct MemoryLeakTracker<T: AnyObject> {
-    weak var instance: T?
-    var sourceLocation: SourceLocation
-
-    func verify() {
-        #expect(instance == nil, "Expected \(instance) to be deallocated. Potential memory leak", sourceLocation: sourceLocation)
-    }
-}
-
 func anyURL() -> URL {
     URL(string: "https://any-url.com")!
 }
@@ -269,3 +317,5 @@ func httpResponse(code: Int) -> HTTPURLResponse {
     let httpResponse = HTTPURLResponse(url: anyURL(), statusCode: code, httpVersion: nil, headerFields: nil)!
     return httpResponse
 }
+
+
