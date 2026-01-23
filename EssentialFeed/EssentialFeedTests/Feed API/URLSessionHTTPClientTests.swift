@@ -18,7 +18,7 @@ class URLSessionHTTPClientTests {
 
         defer { URLProtocolStub.reset() }
 
-        _ = URLSessionHTTPClient(session: makeStubbedSession())
+        _ = makeSUT()
 
         #expect(URLProtocolStub.receivedRequests().isEmpty)
     }
@@ -31,7 +31,7 @@ class URLSessionHTTPClientTests {
 
         let url = anyURL()
         URLProtocolStub.stub(data: anyData(), response: anyValidHTTPResponse())
-        let sut = URLSessionHTTPClient(session: makeStubbedSession())
+        let sut = makeSUT()
 
         _ = try await sut.get(from: url)
 
@@ -50,7 +50,7 @@ class URLSessionHTTPClientTests {
         let url = anyURL()
         let expectedError = NSError(domain: "any error", code: 1)
         URLProtocolStub.stub(data: nil, response: nil, error: expectedError)
-        let sut = URLSessionHTTPClient(session: makeStubbedSession())
+        let sut = makeSUT()
 
         do {
             let _ = try await sut.get(from: url)
@@ -124,7 +124,13 @@ class URLSessionHTTPClientTests {
         override func stopLoading() {}
     }
 
-    func makeStubbedSession() -> URLSession {
+    // MARK: - Helpers
+
+    private func makeSUT() -> URLSessionHTTPClient {
+        return URLSessionHTTPClient(session: makeStubbedSession())
+    }
+
+    private func makeStubbedSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: config)
