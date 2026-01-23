@@ -20,22 +20,25 @@ class URLSessionHTTPClientTests {
 
         _ = URLSessionHTTPClient(session: makeStubbedSession())
 
-        #expect(URLProtocolStub.receivedURLs().isEmpty)
+        #expect(URLProtocolStub.receivedRequests().isEmpty)
     }
 
     @Test
-    func test_getFromURL_createdDataTaskWithURL() async throws {
+    func test_getFromURL_performsGETRequestWithURL() async throws {
         URLProtocolStub.reset()
 
         defer { URLProtocolStub.reset() }
 
         let url = anyURL()
-        URLProtocolStub.stub(url: url, data: anyData(), response: anyValidHTTPResponse())
+        URLProtocolStub.stub(data: anyData(), response: anyValidHTTPResponse())
         let sut = URLSessionHTTPClient(session: makeStubbedSession())
 
-        let _ = try await sut.get(from: url)
+        _ = try await sut.get(from: url)
 
-        #expect(URLProtocolStub.receivedURLs() == [url])
+        let request = try #require(URLProtocolStub.receivedRequests().first)
+        #expect(request.url == url)
+        #expect(request.httpMethod == "GET")
+
     }
 
     @Test
@@ -46,7 +49,7 @@ class URLSessionHTTPClientTests {
 
         let url = anyURL()
         let expectedError = NSError(domain: "any error", code: 1)
-        URLProtocolStub.stub(url: url, data: nil, response: nil, error: expectedError)
+        URLProtocolStub.stub(data: nil, response: nil, error: expectedError)
         let sut = URLSessionHTTPClient(session: makeStubbedSession())
 
         do {
@@ -68,43 +71,37 @@ class URLSessionHTTPClientTests {
             let error: Error?
         }
 
-        private static var stubs: [URL: Stub] = [URL: Stub]()
-        private static var requestedURLs: [URL] = []
+        private static var stub: Stub?
+        private static var requests: [URLRequest] = []
         private static let lock = NSLock()
 
         // Single stub for “the next request(s)”
-        static func stub(url: URL, data: Data? = nil, response: URLResponse? = nil, error: Error? = nil) {
+        static func stub(data: Data? = nil, response: URLResponse? = nil, error: Error? = nil) {
             lock.lock(); defer { lock.unlock() }
-            stubs[url] = Stub(data: data, response: response, error: error)
+            stub = Stub(data: data, response: response, error: error)
         }
 
         static func reset() {
             lock.lock(); defer { lock.unlock() }
-            stubs = [:]
-            requestedURLs = []
+            stub = nil
+            requests = []
         }
 
-        static func receivedURLs() -> [URL] {
+        static func receivedRequests() -> [URLRequest] {
             lock.lock(); defer { lock.unlock() }
-            return requestedURLs
+            return requests
         }
 
-        // ✅ Intercept EVERYTHING. No URL matching problems. Ever.
         override class func canInit(with request: URLRequest) -> Bool { true }
 
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
         override func startLoading() {
-            guard let url = request.url else {
-                client?.urlProtocolDidFinishLoading(self)
-                return
-            }
-
             Self.lock.lock()
-            Self.requestedURLs.append(url)
+            Self.requests.append(request)
             Self.lock.unlock()
 
-            guard let stub = Self.stubs[url] else {
+            guard let stub = Self.stub else {
                 // Fail loudly if you forgot to stub — no silent network calls.
                 client?.urlProtocol(self, didFailWithError: NSError(domain: "Missing stub", code: 0))
                 client?.urlProtocolDidFinishLoading(self)
