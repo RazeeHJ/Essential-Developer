@@ -9,6 +9,7 @@ import Testing
 import EssentialFeed
 import Foundation
 
+@testable import EssentialFeed
 @Suite(.serialized)
 class URLSessionHTTPClientTests {
 
@@ -77,6 +78,29 @@ class URLSessionHTTPClientTests {
         await verifyLeaks()
     }
 
+    @Test
+    func test_getFromURL_failsOnAllNilValues() async throws {
+        URLProtocolStub.reset()
+
+        defer { URLProtocolStub.reset() }
+
+        let url = anyURL()
+        URLProtocolStub.stub(data: nil, response: nil, error: nil)
+
+        var verifyLeaks: (() async -> Void) = {}
+
+        do {
+            let (sut, v) = makeSUT()
+            verifyLeaks = v
+
+            let _ = try await sut.get(from: url)
+            Issue.record("Expected to throw error, but succeeded instead.")
+        } catch {
+            #expect(true)
+        } 
+        await verifyLeaks()
+    }
+
     // MARK: - Helpers
 
     final class URLProtocolStub: URLProtocol {
@@ -113,12 +137,20 @@ class URLSessionHTTPClientTests {
 
         override func startLoading() {
             Self.lock.lock()
+            let stub = Self.stub
             Self.requests.append(request)
             Self.lock.unlock()
 
-            guard let stub = Self.stub else {
-                // Fail loudly if you forgot to stub — no silent network calls.
+            // if no stub configured at all -> fail loudly
+            guard let stub else {
                 client?.urlProtocol(self, didFailWithError: NSError(domain: "Missing stub", code: 0))
+                client?.urlProtocolDidFinishLoading(self)
+                return
+            }
+
+            // Critical: async URLSession can't handle "finish with no events"
+            if stub.data == nil, stub.response == nil, stub.error == nil {
+                client?.urlProtocol(self, didFailWithError: URLSessionHTTPClient.UnExpectedValuesRepresentation())
                 client?.urlProtocolDidFinishLoading(self)
                 return
             }
