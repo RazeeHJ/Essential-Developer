@@ -31,8 +31,9 @@ class URLSessionHTTPClientTests {
 
         let url = anyURL()
         URLProtocolStub.stub(data: anyData(), response: anyValidHTTPResponse())
-        let sut = makeSUT()
+        let (sut, tracker) = makeSUT()
 
+        defer { Task { await tracker.verify() }}
         _ = try await sut.get(from: url)
 
         let request = try #require(URLProtocolStub.receivedRequests().first)
@@ -50,7 +51,9 @@ class URLSessionHTTPClientTests {
         let url = anyURL()
         let expectedError = NSError(domain: "any error", code: 1)
         URLProtocolStub.stub(data: nil, response: nil, error: expectedError)
-        let sut = makeSUT()
+        let (sut, tracker) = makeSUT()
+
+        defer { Task { await tracker.verify() }}
 
         do {
             let _ = try await sut.get(from: url)
@@ -126,14 +129,44 @@ class URLSessionHTTPClientTests {
 
     // MARK: - Helpers
 
-    private func makeSUT() -> URLSessionHTTPClient {
-        return URLSessionHTTPClient(session: makeStubbedSession())
+    private func makeSUT(
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column
+    ) -> (
+        sut: URLSessionHTTPClient,
+        tracker: MemoryLeakTracker<URLSessionHTTPClient>
+    ) {
+        let sut = URLSessionHTTPClient(session: makeStubbedSession())
+        let location = SourceLocation(
+            fileID: fileID,
+            filePath: filePath,
+            line: line,
+            column: column
+        )
+
+        return (sut, MemoryLeakTracker(instance: sut, sourceLocation: location))
     }
 
     private func makeStubbedSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: config)
+    }
+
+    struct MemoryLeakTracker<T: AnyObject>: @unchecked Sendable {
+        weak var instance: T?
+        var sourceLocation: SourceLocation
+
+        func verify() async {
+            await Task.yield()
+            #expect(
+                instance == nil,
+                "Expected \(instance) to be deallocated. Potential memory leak",
+                sourceLocation: sourceLocation
+            )
+        }
     }
 }
 
