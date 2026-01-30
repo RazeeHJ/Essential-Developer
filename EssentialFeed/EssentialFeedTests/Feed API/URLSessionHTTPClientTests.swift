@@ -65,7 +65,6 @@ class URLSessionHTTPClientTests {
 
     @Test
     func test_getFromURL_failsOnAllInvalidRepresentationCases() async throws {
-        let anyURL = anyURL()
         let anyData = anyData()
         let anyError = anyNSError()
         let urlResponse = nonHTTPURLResponse()
@@ -98,6 +97,34 @@ class URLSessionHTTPClientTests {
         await resultErrorFor(data: anyData, response: anyHTTPURLResponse, error: anyError, onFailure: { error in
             #expect(true)
         })
+    }
+
+    @Test
+    func test_getFromURL_succeedsOnHTTPURLResponseWithData() async throws {
+        URLProtocolStub.reset()
+
+        defer { URLProtocolStub.reset() }
+
+        let data = anyData()
+        let response = anyHTTPURLResponse()
+        URLProtocolStub.stub(data: anyData(), response: anyHTTPURLResponse(), error: nil)
+
+        var verifyLeaks: (() async -> Void) = {}
+
+        do {
+            let (sut, v) = makeSUT()
+            verifyLeaks = v
+            let result = try await sut.get(from: anyURL())
+            let receivedData = result.0
+            let receivedResponse = result.1
+
+            let request = try #require(URLProtocolStub.receivedRequests().first)
+            #expect(request.url == anyURL())
+            #expect(request.httpMethod == "GET")
+            #expect(receivedData == data)
+            #expect(receivedResponse.url == response.url)
+        }
+        await verifyLeaks()
     }
 
     // MARK: - Helpers
@@ -172,6 +199,7 @@ class URLSessionHTTPClientTests {
             if let response = stub.response {
                 client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             }
+
             if let data = stub.data {
                 client?.urlProtocol(self, didLoad: data)
             }
