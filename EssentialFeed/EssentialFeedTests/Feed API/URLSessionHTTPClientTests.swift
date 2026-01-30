@@ -54,51 +54,60 @@ class URLSessionHTTPClientTests {
 
     @Test
     func test_getFromURL_failsOnRequestError() async throws {
-        URLProtocolStub.reset()
-
-        defer { URLProtocolStub.reset() }
-
-        let url = anyURL()
         let expectedError = NSError(domain: "any error", code: 1)
-        URLProtocolStub.stub(data: nil, response: nil, error: expectedError)
-
-        var verifyLeaks: (() async -> Void) = {}
-
-        do {
-            let (sut, v) = makeSUT()
-            verifyLeaks = v
-
-            let _ = try await sut.get(from: url)
-            Issue.record("Expected to throw \(expectedError), but succeeded instead.")
-        } catch {
+        await resultErrorFor(data: nil, response: nil, error: expectedError, onFailure: { error in
+            #expect(true)
             let error = error as NSError
             #expect(error.domain == expectedError.domain)
             #expect(error.code == expectedError.code)
-        }
-        await verifyLeaks()
+        })
     }
 
     @Test
-    func test_getFromURL_failsOnAllNilValues() async throws {
-        URLProtocolStub.reset()
+    func test_getFromURL_failsOnAllInvalidRepresentationCases() async throws {
+        let anyURL = anyURL()
+        let anyData = anyData()
+        let anyError = NSError(domain: "any error", code: 1)
+        let urlResponse = URLResponse(
+            url: anyURL,
+            mimeType: nil,
+            expectedContentLength: 0,
+            textEncodingName: nil
+        )
+        let anyHTTPURLResponse = HTTPURLResponse(
+            url: anyURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )
 
-        defer { URLProtocolStub.reset() }
-
-        let url = anyURL()
-        URLProtocolStub.stub(data: nil, response: nil, error: nil)
-
-        var verifyLeaks: (() async -> Void) = {}
-
-        do {
-            let (sut, v) = makeSUT()
-            verifyLeaks = v
-
-            let _ = try await sut.get(from: url)
-            Issue.record("Expected to throw error, but succeeded instead.")
-        } catch {
+        await resultErrorFor(data: nil, response: nil, error: nil, onFailure: { error in
             #expect(true)
-        } 
-        await verifyLeaks()
+        })
+
+        await resultErrorFor(data: nil, response: urlResponse, error: nil, onFailure: { error in
+            #expect(true)
+        })
+
+        await resultErrorFor(data: anyData, response: nil, error: nil, onFailure: { error in
+            #expect(true)
+        })
+
+        await resultErrorFor(data: anyData, response: nil, error: anyError, onFailure: { error in
+            #expect(true)
+        })
+
+        await resultErrorFor(data: nil, response: urlResponse, error: anyError, onFailure: { error in
+            #expect(true)
+        })
+
+        await resultErrorFor(data: nil, response: anyHTTPURLResponse, error: anyError, onFailure: { error in
+            #expect(true)
+        })
+
+        await resultErrorFor(data: anyData, response: anyHTTPURLResponse, error: anyError, onFailure: { error in
+            #expect(true)
+        })
     }
 
     // MARK: - Helpers
@@ -141,28 +150,40 @@ class URLSessionHTTPClientTests {
             Self.requests.append(request)
             Self.lock.unlock()
 
-            // if no stub configured at all -> fail loudly
+            // If no stub configured at all -> fail loudly
             guard let stub else {
                 client?.urlProtocol(self, didFailWithError: NSError(domain: "Missing stub", code: 0))
                 client?.urlProtocolDidFinishLoading(self)
                 return
             }
 
-            // Critical: async URLSession can't handle "finish with no events"
+            // Prefer error if provided
+            if let error = stub.error {
+                client?.urlProtocol(self, didFailWithError: error)
+                client?.urlProtocolDidFinishLoading(self)
+                return
+            }
+
+            // All nil -> invalid (already handled in your version, keep it)
             if stub.data == nil, stub.response == nil, stub.error == nil {
                 client?.urlProtocol(self, didFailWithError: URLSessionHTTPClient.UnExpectedValuesRepresentation())
                 client?.urlProtocolDidFinishLoading(self)
                 return
             }
 
+            // Data without response is invalid in practice for URLSession.data(for:)
+            if stub.data != nil, stub.response == nil {
+                client?.urlProtocol(self, didFailWithError: URLSessionHTTPClient.UnExpectedValuesRepresentation())
+                client?.urlProtocolDidFinishLoading(self)
+                return
+            }
+
+            // Normal path: response (if any), then data (if any)
             if let response = stub.response {
                 client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             }
             if let data = stub.data {
                 client?.urlProtocol(self, didLoad: data)
-            }
-            if let error = stub.error {
-                client?.urlProtocol(self, didFailWithError: error)
             }
 
             client?.urlProtocolDidFinishLoading(self)
@@ -198,6 +219,29 @@ class URLSessionHTTPClientTests {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: config)
+    }
+
+    private func resultErrorFor(data: Data?, response: URLResponse?, error: Error?, fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column, onFailure: (Error) -> Void) async {
+
+        URLProtocolStub.reset()
+
+        defer { URLProtocolStub.reset() }
+
+        let url = anyURL()
+        URLProtocolStub.stub(data: data, response: response, error: error)
+
+        var verifyLeaks: (() async -> Void) = {}
+
+        do {
+            let (sut, v) = makeSUT(fileID: fileID, filePath: filePath, line: line, column: column)
+            verifyLeaks = v
+
+            let _ = try await sut.get(from: url)
+            Issue.record("Expected to throw \(error)}, but succeeded instead.")
+        } catch {
+            onFailure(error)
+        }
+        await verifyLeaks()
     }
 }
 
