@@ -14,7 +14,7 @@ public class URLSessionHTTPClient: HTTPClient {
         self.session = session
     }
 
-    private struct UnExpectedValuesRepresentation: Error {}
+    public struct UnExpectedValuesRepresentation: Error {}
 
     public func get(from url: URL) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await session.data(from: url)
