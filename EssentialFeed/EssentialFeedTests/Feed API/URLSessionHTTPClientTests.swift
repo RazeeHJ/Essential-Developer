@@ -101,58 +101,32 @@ class URLSessionHTTPClientTests {
 
     @Test
     func test_getFromURL_succeedsOnHTTPURLResponseWithData() async throws {
-        URLProtocolStub.reset()
-
-        defer { URLProtocolStub.reset() }
-
         let data = anyData()
         let response = anyHTTPURLResponse()
-        URLProtocolStub.stub(data: anyData(), response: anyHTTPURLResponse(), error: nil)
+        let receivedValues = try? await resultValuesFor(
+            data: data,
+            response: response,
+            error: nil
+        )
 
-        var verifyLeaks: (() async -> Void) = {}
-
-        do {
-            let (sut, v) = makeSUT()
-            verifyLeaks = v
-            let result = try await sut.get(from: anyURL())
-            let receivedData = result.0
-            let receivedResponse = result.1
-
-            let request = try #require(URLProtocolStub.receivedRequests().first)
-            #expect(request.url == anyURL())
-            #expect(request.httpMethod == "GET")
-            #expect(receivedData == data)
-            #expect(receivedResponse.url == response.url)
-        }
-        await verifyLeaks()
+        #expect(receivedValues?.response.url == anyURL())
+        #expect(receivedValues?.data == data)
+        #expect(receivedValues?.response.statusCode == response.statusCode)
     }
 
     @Test
     func test_getFromURL_succeedsWithEmptyDataOnHTTPURLResponseWithNilData() async throws {
-        URLProtocolStub.reset()
-
-        defer { URLProtocolStub.reset() }
-
+        let emptyData = Data()
         let response = anyHTTPURLResponse()
-        URLProtocolStub.stub(data: nil, response: anyHTTPURLResponse(), error: nil)
+        let receivedValues = try? await resultValuesFor(
+            data: nil,
+            response: response,
+            error: nil
+        )
 
-        var verifyLeaks: (() async -> Void) = {}
-
-        do {
-            let (sut, v) = makeSUT()
-            verifyLeaks = v
-            let result = try await sut.get(from: anyURL())
-            let emptyData = Data()
-            let receivedData = result.0
-            let receivedResponse = result.1
-
-            let request = try #require(URLProtocolStub.receivedRequests().first)
-            #expect(request.url == anyURL())
-            #expect(request.httpMethod == "GET")
-            #expect(receivedData == emptyData)
-            #expect(receivedResponse.url == response.url)
-        }
-        await verifyLeaks()
+        #expect(receivedValues?.response.url == anyURL())
+        #expect(receivedValues?.data == emptyData)
+        #expect(receivedValues?.response.statusCode == response.statusCode)
     }
 
     // MARK: - Helpers
@@ -265,6 +239,47 @@ class URLSessionHTTPClientTests {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: config)
+    }
+
+    private func resultValuesFor(data: Data?, response: URLResponse?, error: Error?, fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column) async throws -> (
+        data: Data,
+        response: HTTPURLResponse
+    )? {
+        do {
+            let result = try await resultFor(
+                data: data,
+                response: response,
+                error: error
+            )
+            return result
+        } catch {
+            Issue.record("Unexpected error thrown: \(error)")
+            return nil
+        }
+    }
+
+    private func resultFor(data: Data?, response: URLResponse?, error: Error?, fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column) async throws -> (
+        data: Data,
+        response: HTTPURLResponse
+    )? {
+        var receivedResult: (data: Data, response: HTTPURLResponse)?
+        URLProtocolStub.reset()
+
+        defer { URLProtocolStub.reset() }
+
+        let url = anyURL()
+        URLProtocolStub.stub(data: data, response: response, error: error)
+
+        var verifyLeaks: (() async -> Void) = {}
+
+        do {
+            let (sut, v) = makeSUT(fileID: fileID, filePath: filePath, line: line, column: column)
+            verifyLeaks = v
+
+            receivedResult = try await sut.get(from: url)
+            return receivedResult
+        }
+        await verifyLeaks()
     }
 
     private func resultErrorFor(data: Data?, response: URLResponse?, error: Error?, fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column, onFailure: (Error) -> Void) async {
