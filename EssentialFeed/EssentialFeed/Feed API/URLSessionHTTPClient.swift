@@ -7,10 +7,6 @@
 
 import Foundation
 
-public protocol HTTPSession {
-    func dataTask(with url: URL) async throws -> (Data, URLResponse)
-}
-
 public class URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
 
@@ -18,7 +14,7 @@ public class URLSessionHTTPClient: HTTPClient {
         self.session = session
     }
 
-    public struct UnExpectedValuesRepresentation: Error {}
+    private struct UnExpectedValuesRepresentation: Error {}
 
     public func get(from url: URL) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await session.data(from: url)
