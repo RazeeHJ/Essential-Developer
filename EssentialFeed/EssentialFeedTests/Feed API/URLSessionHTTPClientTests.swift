@@ -127,6 +127,34 @@ class URLSessionHTTPClientTests {
         await verifyLeaks()
     }
 
+    @Test
+    func test_getFromURL_succeedsWithEmptyDataOnHTTPURLResponseWithNilData() async throws {
+        URLProtocolStub.reset()
+
+        defer { URLProtocolStub.reset() }
+
+        let response = anyHTTPURLResponse()
+        URLProtocolStub.stub(data: nil, response: anyHTTPURLResponse(), error: nil)
+
+        var verifyLeaks: (() async -> Void) = {}
+
+        do {
+            let (sut, v) = makeSUT()
+            verifyLeaks = v
+            let result = try await sut.get(from: anyURL())
+            let emptyData = Data()
+            let receivedData = result.0
+            let receivedResponse = result.1
+
+            let request = try #require(URLProtocolStub.receivedRequests().first)
+            #expect(request.url == anyURL())
+            #expect(request.httpMethod == "GET")
+            #expect(receivedData == emptyData)
+            #expect(receivedResponse.url == response.url)
+        }
+        await verifyLeaks()
+    }
+
     // MARK: - Helpers
 
     final class URLProtocolStub: URLProtocol {
