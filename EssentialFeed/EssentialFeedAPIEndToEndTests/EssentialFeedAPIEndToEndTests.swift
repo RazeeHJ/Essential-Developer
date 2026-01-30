@@ -14,25 +14,43 @@ struct EssentialFeedAPIEndToEndTests {
     @Test
     func test_endToEndTestServerGETResult_matchesFixedTestAccountData() async throws {
         let receivedResult = try await getFeedResult()
-        #expect(receivedResult.count == 8)
-        #expect(receivedResult[0] == expectedItem(at: 0))
-        #expect(receivedResult[1] == expectedItem(at: 1))
-        #expect(receivedResult[2] == expectedItem(at: 2))
-        #expect(receivedResult[3] == expectedItem(at: 3))
-        #expect(receivedResult[4] == expectedItem(at: 4))
-        #expect(receivedResult[5] == expectedItem(at: 5))
-        #expect(receivedResult[6] == expectedItem(at: 6))
-        #expect(receivedResult[7] == expectedItem(at: 7))
+        #expect(receivedResult.feedItem.count == 8)
+        #expect(receivedResult.feedItem[0] == expectedItem(at: 0))
+        #expect(receivedResult.feedItem[1] == expectedItem(at: 1))
+        #expect(receivedResult.feedItem[2] == expectedItem(at: 2))
+        #expect(receivedResult.feedItem[3] == expectedItem(at: 3))
+        #expect(receivedResult.feedItem[4] == expectedItem(at: 4))
+        #expect(receivedResult.feedItem[5] == expectedItem(at: 5))
+        #expect(receivedResult.feedItem[6] == expectedItem(at: 6))
+        #expect(receivedResult.feedItem[7] == expectedItem(at: 7))
     }
 
-    private func getFeedResult() async throws -> [FeedItem] {
+    @Test
+    func getFeedResult_doesNotLeak() async throws {
+        let (items, checkLeaks) = try await getFeedResult()
+        #expect(!items.isEmpty) 
+        await checkLeaks()
+    }
+
+    private func getFeedResult(fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column) async throws -> (
+        feedItem: [FeedItem],
+        verifyLeaks: () async -> Void
+    ) {
         let testServerURL = URL(string: "https://essentialdeveloper.com/feed-case-study/test-api/feed")!
         let client = URLSessionHTTPClient()
         let loader = RemoteFeedLoader(url: testServerURL, client: client)
 
+        let sourceLocation = SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column)
+        let verifyClient = trackForMemoryLeaks(client, sourceLocation: sourceLocation)
+        let verifyLoader = trackForMemoryLeaks(loader, sourceLocation: sourceLocation)
+
+        let verifyLeaks = {
+            await verifyClient()
+            await verifyLoader()
+        }
         let receivedResult = try await loader.load()
 
-        return receivedResult
+        return (receivedResult, verifyLeaks)
     }
 
     // MARK: - Helpers
