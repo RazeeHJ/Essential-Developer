@@ -67,19 +67,9 @@ class URLSessionHTTPClientTests {
     func test_getFromURL_failsOnAllInvalidRepresentationCases() async throws {
         let anyURL = anyURL()
         let anyData = anyData()
-        let anyError = NSError(domain: "any error", code: 1)
-        let urlResponse = URLResponse(
-            url: anyURL,
-            mimeType: nil,
-            expectedContentLength: 0,
-            textEncodingName: nil
-        )
-        let anyHTTPURLResponse = HTTPURLResponse(
-            url: anyURL,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )
+        let anyError = anyNSError()
+        let urlResponse = nonHTTPURLResponse()
+        let anyHTTPURLResponse = anyHTTPURLResponse()
 
         await resultErrorFor(data: nil, response: nil, error: nil, onFailure: { error in
             #expect(true)
