@@ -220,7 +220,7 @@ class URLSessionHTTPClientTests {
         line: Int = #line,
         column: Int = #column
     ) -> (
-        sut: URLSessionHTTPClient,
+        sut: HTTPClient,
         verifyLeaks: () async -> Void
     ) {
         let sut = URLSessionHTTPClient(session: makeStubbedSession())
